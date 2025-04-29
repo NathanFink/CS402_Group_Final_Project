@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
+import { Picker } from '@react-native-picker/picker'
 import {
   View,
   Text,
@@ -29,7 +30,12 @@ export default function App() {
   const [tempPhoto, setTempPhoto] = useState(null);
   const [addItemModalVisible, setAddItemModalVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
-
+  const [categoryName, setCategoryName] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [addCategoryModalVisible, setAddCategoryModalVisible] = useState(false);
+  const [categoryOptionsModalVisible, setCategoryOptionsModalVisible] = useState(false);
+  const [editCategoryName, setEditCategoryName] = useState('');
+  
   const LOAD_URL = 'https://mec402.boisestate.edu/csclasses/cs402/project/loadjson.php?user=finalprojectteam7';
   const SAVE_URL = 'https://mec402.boisestate.edu/csclasses/cs402/project/savejson.php?user=finalprojectteam7';
 
@@ -48,6 +54,8 @@ export default function App() {
     } catch (error) {
       Alert.alert('Error', 'Failed to load inventory: ' + error.message);
     }
+    // setInventory([]);
+    // saveInventory([]); //uncomment these lines to reset the inventory
   };
 
   // Function to save inventory to remote url
@@ -73,18 +81,6 @@ export default function App() {
   useEffect(() => {
     loadInventory();
   }, []);
-  // Use local state for inventory
-  // useEffect(() => {
-  //   if (!mediaPermission) {
-  //     requestMediaPermission();
-  //   }
-  // }, []);
-
-
-  // Save inventory data to state only no persistence right now
-  // const saveInventory = (newInventory) => {
-  //   setInventory(newInventory);
-  // };
 
   const toggleCameraFacing = () => {
     setFacing((current) => (current === 'back' ? 'front' : 'back'));
@@ -134,9 +130,18 @@ export default function App() {
       name: itemName,
       quantity: parseInt(itemQuantity, 10),
       image: tempPhoto.uri,
+      category: selectedCategory
     };
 
-    const updatedInventory = [...inventory, newItem];
+    const updatedInventory = inventory.map((cat) => {
+      if (cat.category === selectedCategory) {
+        return {
+          ...cat,
+          items: [...cat.items, newItem],
+        };
+      }
+      return cat;
+    });
     setInventory(updatedInventory);
     saveInventory(updatedInventory);
     setAddItemModalVisible(false);
@@ -157,15 +162,40 @@ export default function App() {
       return;
     }
 
-    const updatedInventory = inventory.map(item => 
-      item.id === selectedItem.id ? 
-      {
-        ...item,
-        name: itemName,
-        quantity: parseInt(itemQuantity, 10),
-        image: tempPhoto ? tempPhoto.uri : item.image
-      } : item
-    );
+    const updatedItem = {
+      ...selectedItem,
+      name: itemName,
+      quantity,
+      image: tempPhoto ? tempPhoto.uri : selectedItem.image,
+      category: selectedCategory,
+    };
+
+    const updatedInventory = inventory.map((cat) => {
+      if (cat.category === selectedItem.category && cat.category === selectedCategory) {
+        // Category hasn't changed, update item in place
+        return {
+          ...cat,
+          items: cat.items.map((item) =>
+            item.id === selectedItem.id ? updatedItem : item
+          ),
+        };
+      } else if (cat.category === selectedItem.category) {
+        // Remove from old category
+        return {
+          ...cat,
+          items: cat.items.filter((item) => item.id !== selectedItem.id),
+        };
+      } else if (cat.category === selectedCategory) {
+        // Add to new category
+        return {
+          ...cat,
+          items: [...cat.items, updatedItem],
+        };
+      }
+    
+      return cat;
+    });
+    
 
     setInventory(updatedInventory);
     saveInventory(updatedInventory);
@@ -186,7 +216,16 @@ export default function App() {
         {
           text: 'Delete',
           onPress: () => {
-            const updatedInventory = inventory.filter(item => item.id !== selectedItem.id);
+            const updatedInventory = inventory.map((cat) => {
+              if (cat.category === selectedItem.category) {
+                return {
+                  ...cat,
+                  items: cat.items.filter((item) => item.id !== selectedItem.id),
+                };
+              }
+              return cat;
+            });
+            console.log('Updated Inventory:', updatedInventory)
             setInventory(updatedInventory);
             saveInventory(updatedInventory);
             setModalVisible(false);
@@ -201,18 +240,23 @@ export default function App() {
     setItemName(selectedItem.name);
     setItemQuantity(selectedItem.quantity.toString());
     setTempPhoto({ uri: selectedItem.image });
+    setSelectedCategory(selectedItem.category);
     setEditMode(true);
     setModalVisible(false);
     setAddItemModalVisible(true);
   };
 
-
   const renderMainScreen = () => (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Warehouse Inventory</Text>
+      </View>
+      <View style={styles.buttonRow}> 
         <TouchableOpacity style={styles.addButton} onPress={openAddItemModal}>
           <Text style={styles.addButtonText}>+ Add Item</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addButton} onPress={() => setAddCategoryModalVisible(true)}>
+          <Text style={styles.addButtonText}>+ Add category</Text>
         </TouchableOpacity>
       </View>
 
@@ -224,15 +268,30 @@ export default function App() {
       ) : (
         <FlatList
           data={inventory}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          style={styles.grid}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.gridItem} onPress={() => openItemModal(item)}>
-              <Image source={{ uri: item.image }} style={styles.itemImage} />
-              <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-              <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
-            </TouchableOpacity>
+          keyExtractor={(item) => item.category}
+          renderItem={({ item: category }) => (
+            <View style={styles.categorySection}>
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedCategory(category);
+                  setEditCategoryName(category.category);
+                  setCategoryOptionsModalVisible(true);
+                }}
+              >
+                <Text style={styles.categoryTitle}>{category.category}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.grid}>
+                {category.items.map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.gridItem} onPress={() => openItemModal(item)}>
+
+                    <Image source={{ uri: item.image }} style={styles.itemImage} />
+                    <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           )}
         />
       )}
@@ -335,6 +394,19 @@ export default function App() {
               {tempPhoto ? 'Retake Photo' : 'Take Photo'}
             </Text>
           </TouchableOpacity>
+          <Picker
+            selectedValue={selectedCategory}
+            onValueChange={(itemValue) => setSelectedCategory(itemValue)}
+            style={{ height: 50, width: '100%' }}
+          >
+            {inventory.map((cat) => (
+              <Picker.Item
+                label={cat.category}
+                value={cat.category}
+                key={cat.category}
+              />
+            ))}
+          </Picker>
 
           <TextInput
             style={styles.input}
@@ -392,11 +464,129 @@ export default function App() {
     </Modal>
   );
 
+   //Category Modal
+  const renderCategoryModal = () => (
+    <Modal visible={addCategoryModalVisible} transparent animationType="slide">
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>Add Category</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Category Name"
+          value={categoryName}
+          onChangeText={setCategoryName}
+        />
+        <View style={styles.modalButtonsRow}>
+          <TouchableOpacity onPress={() => setAddCategoryModalVisible(false)} style={[styles.modalButton, styles.cancelButton]}>
+            <Text style={styles.buttonText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (!categoryName.trim()) return;
+              const exists = inventory.some(c => c.category === categoryName);
+              if (exists) {
+                Alert.alert("Category already exists");
+                return;
+              }
+              const updatedInventory = [...inventory, { category: categoryName, items: [] }];
+              setInventory(updatedInventory);
+              saveInventory(updatedInventory);
+              setAddCategoryModalVisible(false);
+            }}
+            style={[styles.modalButton, styles.saveButton]}
+          >
+            <Text style={styles.buttonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
+  
+   );
+
+  const renderCategoryOptionsModal = () => (
+    <Modal visible={categoryOptionsModalVisible} transparent animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Edit Category</Text>
+  
+          <TextInput
+            style={styles.input}
+            value={editCategoryName}
+            onChangeText={setEditCategoryName}
+          />
+  
+          <View style={styles.modalButtonsRow}>
+            <TouchableOpacity
+              onPress={() => setCategoryOptionsModalVisible(false)}
+              style={[styles.modalButton, styles.cancelButton]}>
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+  
+            <TouchableOpacity
+              onPress={() => {
+                if (!editCategoryName.trim()) return;
+  
+                const exists = inventory.some(
+                  (c) => c.category === editCategoryName && c !== selectedCategory
+                );
+                if (exists) {
+                  Alert.alert("Error", "Category with this name already exists.");
+                  return;
+                }
+  
+                const updatedInventory = inventory.map((cat) =>
+                  cat === selectedCategory
+                    ? { ...cat, category: editCategoryName }
+                    : cat
+                );
+  
+                setInventory(updatedInventory);
+                saveInventory(updatedInventory);
+                setCategoryOptionsModalVisible(false);
+              }}
+              style={[styles.modalButton, styles.saveButton]}>
+              <Text style={styles.buttonText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+  
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Delete Category',
+                `Are you sure you want to delete "${selectedCategory.category}"? This will also delete all its items.`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                      const updatedInventory = inventory.filter(
+                        (cat) => cat !== selectedCategory
+                      );
+                      setInventory(updatedInventory);
+                      saveInventory(updatedInventory);
+                      setCategoryOptionsModalVisible(false);
+                    },
+                  },
+                ]
+              );
+            }}
+            style={[styles.modalButton, styles.deleteButton]}>
+            <Text style={styles.buttonText}>Delete Category</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+  
   return (
     <>
       {cameraVisible ? renderCameraScreen() : renderMainScreen()}
       {renderItemModal()}
       {renderAddItemModal()}
+      {renderCategoryModal()}
+      {renderCategoryOptionsModal()}
     </>
   );
 }
@@ -460,11 +650,20 @@ export default function App() {
     fontSize: 20,
     fontWeight: 'bold',
   },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    marginTop:20,
+    paddingHorizontal: 10,
+  },
   addButton: {
     backgroundColor: '#fff',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
+    marginHorizontal: 5,
+    flex: 1,
   },
   addButtonText: {
     color: '#2196f3',
@@ -472,9 +671,13 @@ export default function App() {
   },
   grid: {
     padding: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
   gridItem: {
-    flex: 1,
+    width: '45%',
+    // flex: 1,
     margin: 8,
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -701,5 +904,10 @@ export default function App() {
     backgroundColor: '#00c853',
     flex: 1,
     marginLeft: 5,
+  },
+  //Category
+  categoryTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
 });
