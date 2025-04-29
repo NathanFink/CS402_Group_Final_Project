@@ -30,18 +30,61 @@ export default function App() {
   const [addItemModalVisible, setAddItemModalVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
-  // Use local state for inventory
-  useEffect(() => {
-    if (!mediaPermission) {
-      requestMediaPermission();
+  const LOAD_URL = 'https://mec402.boisestate.edu/csclasses/cs402/project/loadjson.php?user=finalprojectteam7';
+  const SAVE_URL = 'https://mec402.boisestate.edu/csclasses/cs402/project/savejson.php?user=finalprojectteam7';
+
+  // Function to load inventory from remote url
+  async function loadInventory() {
+    try {
+      const response = await fetch(LOAD_URL);
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text); // try parsing manually...
+        setInventory(data.inventory || []);
+      } catch (jsonError) {
+        console.error('Response was not valid JSON:', text);
+        throw new Error('Invalid JSON response from server');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to load inventory: ' + error.message);
     }
+  };
+
+  // Function to save inventory to remote url
+  async function saveInventory(newInventory) {
+    try {
+      const response = await fetch(SAVE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ inventory: newInventory }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to save inventory');
+      }
+      setInventory(newInventory); // Update local state after successful save
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save inventory: ' + error.message);
+    }
+  };
+
+  // Load inventory when the app starts
+  useEffect(() => {
+    loadInventory();
   }, []);
+  // Use local state for inventory
+  // useEffect(() => {
+  //   if (!mediaPermission) {
+  //     requestMediaPermission();
+  //   }
+  // }, []);
 
 
   // Save inventory data to state only no persistence right now
-  const saveInventory = (newInventory) => {
-    setInventory(newInventory);
-  };
+  // const saveInventory = (newInventory) => {
+  //   setInventory(newInventory);
+  // };
 
   const toggleCameraFacing = () => {
     setFacing((current) => (current === 'back' ? 'front' : 'back'));

@@ -1,0 +1,12 @@
+This is my submission for the camera app assignment. 
+
+The interface includes a function for picture taking, in which the picture will be added to the list at the bottom where you
+can delete, save to your device, or share.
+
+I did install some dependencies:
+
+npx expo install expo-sharing
+npx expo install expo-media-library
+npx expo install expo-camera
+
+and i used npm run to run the app and expo go app to test.
